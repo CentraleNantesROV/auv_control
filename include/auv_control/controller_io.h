@@ -15,6 +15,7 @@
 #include <Eigen/Geometry>
 
 #include <auv_control/eigen_typedefs.h>
+#include <auv_control/hydrodynamics.h>
 //#include <auv_control/srv/control.hpp>
 
 namespace auv_control
@@ -105,6 +106,7 @@ protected:
   //decltype (ControlMode::Request::mode) control_mode;
   rclcpp::TimerBase::SharedPtr cmd_timer;
   thruster_manager::ThrusterManager allocator;
+  std::unique_ptr<Hydrodynamics> hydro;
 
   // command output
   // if we publish output as joint states
@@ -115,8 +117,8 @@ protected:
   std::vector<rclcpp::Publisher<Float64>::SharedPtr> cmd_gz_pub;
 
   // command output
-  void computeThrusts();
-  void publishThrusts();
+  Eigen::VectorXd computeThrusts();
+  void publish(const Eigen::VectorXd &thrusts);
 
   // actual-controller-dependent
   virtual Vector6d computeWrench(const Vector6d &se3_error,

@@ -45,7 +45,7 @@ else()
 endif()
 
 # Body cascaded PID
-add_executable(body_pid src/body_pid.cpp)
+add_executable(body_pid src/body_pid.cpp src/multi_cascaded_pid.cpp src/cascaded_pid.cpp)
 target_link_libraries(body_pid control_common)
 
 # Body sliding mode
@@ -61,6 +61,6 @@ endif()
 install(TARGETS control_common body_pid body_sm
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
-  RUNTIME DESTINATION share/${PROJECT_NAME})
+  RUNTIME DESTINATION lib/${PROJECT_NAME})
   
 ament_package()
