@@ -18,7 +18,7 @@ All controllers subscribe to the following:
 
 The output may be:
 - `cmd_thrust` (`JointState`): only the `effort` field is populated with the corresponding thrust for this thruster
-- `<thruster>/thrust` (`Double`): the desired thrust for this thruster. This output is compatible with Ignition thruster plugin.
+- `<thruster>_cmd` (`Double`): the desired thrust for this thruster. This output is compatible with Ignition thruster plugin.
 
 ## Cascaded PID
 
