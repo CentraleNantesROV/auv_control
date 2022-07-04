@@ -16,7 +16,7 @@
 
 #include <auv_control/eigen_typedefs.h>
 #include <auv_control/hydrodynamics.h>
-//#include <auv_control/srv/control.hpp>
+#include <auv_control/srv/control.hpp>
 
 namespace auv_control
 {
@@ -29,7 +29,7 @@ class ControllerIO : public rclcpp::Node
   using Float64 = std_msgs::msg::Float64;
   using Wrench = geometry_msgs::msg::Wrench;
   using Odometry = nav_msgs::msg::Odometry;
-  //using ControlMode = auv_control::srv::Control;
+  using ControlMode = auv_control::srv::Control;
 
 public:
   ControllerIO(std::string name, rclcpp::NodeOptions options = rclcpp::NodeOptions{});
@@ -102,8 +102,8 @@ protected:
   // command computation
   uint dofs{};
   std::chrono::milliseconds cmd_period;
-  //rclcpp::Service<ControlMode>::SharedPtr control_srv;
-  //decltype (ControlMode::Request::mode) control_mode;
+  rclcpp::Service<ControlMode>::SharedPtr control_srv;
+  decltype (ControlMode::Request::mode) control_mode;
   rclcpp::TimerBase::SharedPtr cmd_timer;
   thruster_manager::ThrusterManager allocator;
   std::unique_ptr<Hydrodynamics> hydro;

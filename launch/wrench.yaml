@@ -1,0 +1,18 @@
+/bluerov2/wrench:
+    type: geometry_msgs/Wrench
+    fx:
+        min: -20
+        max: 20
+        to: force.x
+    fy:
+        min: -20
+        max: 20
+        to: force.y
+    fz:
+        min: -20
+        max: 20
+        to: force.z
+    tz:
+        min: -20
+        max: 20
+        to: torque.z

@@ -44,13 +44,13 @@ else()
     target_link_libraries(control_common "${cpp_typesupport_target}")
 endif()
 
-# Body cascaded PID
-add_executable(body_pid src/body_pid.cpp src/multi_cascaded_pid.cpp src/cascaded_pid.cpp)
-target_link_libraries(body_pid control_common)
+# Decoupled cascaded PID
+add_executable(cascaded_pid src/cascaded_pid.cpp src/pos_vel_pid.cpp)
+target_link_libraries(cascaded_pid control_common)
 
-# Body sliding mode
-add_executable(body_sm src/body_sm.cpp)
-target_link_libraries(body_sm control_common)
+# Sliding mode control
+add_executable(sliding_mode src/sliding_mode.cpp)
+target_link_libraries(sliding_mode control_common)
 
 if(NOT WIN32)
   ament_environment_hooks(
@@ -58,9 +58,12 @@ if(NOT WIN32)
     )
 endif()
 
-install(TARGETS control_common body_pid body_sm
+install(TARGETS control_common cascaded_pid sliding_mode
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME})
+  
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME})
   
 ament_package()

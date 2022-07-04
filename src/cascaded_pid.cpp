@@ -1,55 +1,144 @@
 #include <auv_control/cascaded_pid.h>
 
+using std::string;
 using namespace auv_control;
 
-double* CascadedPID::gainFromName(const std::string &gain)
-{
-  if(gain == "Kp") return &Kp;
-  if(gain == "Kv") return &Kv;
-  if(gain == "Ki") return &Ki;
-  if(gain == "Kd") return &Kd;
-  if(gain == "v_sat") return &v_sat;
-  if(gain == "u_sat") return &u_sat;
-  return nullptr;
-}
 
-std::string CascadedPID::tuneFromParam(const rclcpp::Parameter &param)
-{
-  const auto name{param.get_name().substr(axis.size()+1)};
 
-  if(name == "use_position" && param.get_type() == rclcpp::ParameterType::PARAMETER_BOOL)
+
+CascadedPID::CascadedPID() : ControllerIO("cascaded_pid")
+{
+  PID::setSamplingTime(cmd_period);
+
+  // get max thrust per axis, useless to have a running PID on a non-controllable axis
+  const std::vector<std::string> axes{"x", "y", "z", "roll", "pitch", "yaw"};
+  const auto max_wrench{allocator.maxWrench()};
+  for(int axis = 0; axis < 6; ++axis)
   {
-    use_position = param.as_bool();
-    return {};
+    if(max_wrench(axis) < 1e-3) continue;
+
+    // the AUV can move in this direction, check for any parameters
+    auto gains{PID::defaultGains()};
+    gains["u_sat"] = max_wrench(axis);
+    gains["v_sat"] = std::numeric_limits<double>::infinity();
+
+    for(auto &[gain, val]: gains)
+      val = declare_parameter(axes[axis] + "." + gain, val);
+
+    pids.emplace_back(axes[axis], axis, gains);
+
+    // override position control mode
+    pids.back().use_position = declare_parameter(axes[axis] + "." + "use_position", true);
   }
 
-  const auto gain{gainFromName(name)};
-  if(!gain) return {};
-
-  const auto is_numeric{param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE ||
-                      param.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER};
-  const auto is_valid{param.as_double() >= 0};
-
-  if(is_numeric && is_valid)
-  {
-    *gain = param.as_double();
-    return {};
-  }
-  return name + (is_numeric ? " is negative " : " is not numeric ");
+  gains_callback = add_on_set_parameters_callback([&](const auto &parameters)
+    {return tuneFromParams(parameters);});
 }
 
-double CascadedPID::update()
+Vector6d CascadedPID::computeWrench(const Vector6d &se3_error,
+                                    const Vector6d &vel,
+                                    const Vector6d &vel_setpoint)
 {
-  // actual PID is here
-  double e{Kv*(vel_sp - vel)};
-  if(use_position)
-    e += std::clamp(Kp*(position_sp-position), -v_sat, v_sat);
+  static Vector6d wrench;
+  wrench.setZero();
+  // call PIDs
+  for(auto &pid: pids)
+  {
+    const auto idx{pid.component};
+    wrench[idx] = pid.update(se3_error[idx], vel[idx], vel_setpoint[idx]);
+  }
+  return wrench;
+}
 
-  if(std::abs(cmd_integral) < u_sat)
-    cmd_integral += Ki*dt*e;
 
-  const auto cmd{cmd_integral + e - Kd/dt*(vel-vel_prev)};
+rcl_interfaces::msg::SetParametersResult CascadedPID::tuneFromParams(const std::vector<rclcpp::Parameter> &parameters)
+{
+  static rcl_interfaces::msg::SetParametersResult result;
+  for(const auto &param: parameters)
+  {
+    for(auto &pid: pids)
+    {
+      if(pid.hasGain(param.get_name()))
+      {
+        result.reason += pid.tuneFromParam(param);
+        break;
+      }
+    }
+  }
 
-  vel_prev = vel;
-  return std::clamp(cmd, -u_sat, u_sat);
+  result.successful = result.reason.empty();
+  return result;
+}
+/*
+namespace auv_control
+{
+
+BodyPID() : ControllerIO("cascaded_pid")
+
+class BodyPID : public ControllerIO, public CascadedPID
+{
+public:
+  BodyPID() : ControllerIO("cascaded_pid"), CascadedPID(this)
+  {
+    const auto ns = string{get_namespace()};
+
+    //initControllers(ns, cmd_period);
+      }
+
+  Vector6d computeWrench(const Vector6d &se3_error,
+                         const Vector6d &vel,
+                         const Vector6d &vel_setpoint) override
+  {
+    static const std::array<std::string, 6> axis{"x","y","z","roll","pitch","yaw"};
+
+    Vector6d wrench;
+    wrench.setZero();
+    // call PIDs
+    for(uint i = 0; i < 6; ++i)
+    {
+      const auto pid_opt{whoControls(axis[i])};
+      if(!pid_opt.has_value()) continue;
+      auto & pid{*(pid_opt.value())};
+
+      pid.vel = vel[i];
+      pid.vel_sp = vel_setpoint[i];
+      pid.position_sp = se3_error[i]; // current position is always 0 as we are in local frame
+      wrench[i] = pid.update();
+    }
+    return wrench;
+  }
+
+private:
+
+  void initFromModel([[maybe_unused]] const string &ns) override
+  {
+    const auto max_wrench{allocator.maxWrench()};
+
+    const std::array<string,6> axes{{"x","y","z","roll","pitch","yaw"}};
+
+    for(size_t i = 0; i < 6; ++i)
+    {
+      const auto &axis{axes[i]};
+
+      if(max_wrench[i] > 1e-3)
+      {
+        // the AUV can move in this direction
+        pids.emplace_back(axis, 1., 0.4, 0.1, 0, std::numeric_limits<double>::infinity(), max_wrench[i]);
+      }
+    }
+  }
+
+
+};
+}
+*/
+
+
+// boilerplate main
+int main(int argc, char** argv)
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<CascadedPID>());
+  rclcpp::shutdown();
+  return 0;
 }

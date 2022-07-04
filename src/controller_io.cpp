@@ -44,9 +44,9 @@ Vector6d ControllerIO::Pose::toSE3() const
 
 ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
   : Node(name,
-         options.automatically_declare_parameters_from_overrides(true)
+         options//.automatically_declare_parameters_from_overrides(true)
          .allow_undeclared_parameters(true)),
-    tf_buffer(this->get_clock()), tf_listener(tf_buffer)
+    tf_buffer(get_clock()), tf_listener(tf_buffer)
 {
   // control_frame defaults to ns/base_link
   control_frame = get_namespace();
@@ -58,12 +58,13 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
   control_frame = declare_parameter<std::string>("control_frame", control_frame);
 
   // control output
-  const auto pub_js{declare_parameter("publish_joint_state", true)};
-  const auto pub_gz{declare_parameter("publish_gz_command", false)};
-  if(pub_js)
+  cmd.name = allocator.parseRobotDescription(this, control_frame);
+  dofs = cmd.name.size();
+  cmd.effort.resize(dofs, 0);
+  if(declare_parameter("publish_joint_state", true))
     cmd_js_pub = create_publisher<JointState>("cmd_thrust", 5);
 
-  if(pub_gz)
+  if(get_parameter("use_sim_time").as_bool())
   {
     for(const auto &name: cmd.name)
     {
@@ -71,10 +72,6 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
       cmd_gz_pub.push_back(create_publisher<Float64>(topic,5));
     }
   }
-
-  cmd.name = allocator.parseRobotDescription(this, control_frame);
-  dofs = cmd.name.size();
-  cmd.effort.resize(dofs, 0);
 
   // control input
   pose_sub = create_subscription<PoseStamped>("cmd_pose", 10, [&](PoseStamped::SharedPtr msg)
@@ -93,19 +90,15 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
                wrench2Eigen(*msg, wrench_setpoint);
                wrench_setpoint.time = get_clock()->now().seconds();});
 
-  odom_sub = create_subscription<Odometry>("pose_gt", 10, [&](Odometry::SharedPtr msg)
+  odom_sub = create_subscription<Odometry>("odom", 10, [&](Odometry::SharedPtr msg)
   {twist2Eigen(msg->twist.twist, vel);
              Pose::tf2Rotation(msg->pose.pose.orientation, orientation);});
 
-  /* control_srv = create_service<ControlMode>
+   control_srv = create_service<ControlMode>
                 ("control_mode",
                  [&](const ControlMode::Request::SharedPtr request,
                  [[maybe_unused]] ControlMode::Response::SharedPtr response)
-  {
-    control_mode = request->mode;});
-    */
-
-  cmd.name = allocator.parseRobotDescription(this, control_frame);
+  {control_mode = request->mode;});
 
   const auto cmd_period_ms{declare_parameter("control_period_ms", 100)};
   cmd_period = std::chrono::milliseconds(cmd_period_ms);
@@ -138,7 +131,7 @@ Eigen::VectorXd ControllerIO::computeThrusts()
 
   // pose / vel control
   Vector6d se3_error;
-  if(pose_timeout)// || control_mode == ControlMode::Request::VELOCITY)
+  if(pose_timeout || control_mode == ControlMode::Request::VELOCITY)
     se3_error.setZero();
   else if(pose_setpoint.frame == control_frame)
     se3_error = pose_setpoint.toSE3();
@@ -154,7 +147,7 @@ Eigen::VectorXd ControllerIO::computeThrusts()
     relPose(vel_setpoint.frame).rotate2(vel_setpoint, vel_setpoint_local);
 
   // hybrid control mode
-  //if(control_mode == ControlMode::Request::DEPTH)
+  if(control_mode == ControlMode::Request::DEPTH)
   {
     // position mode only for Z, roll, pitch
     se3_error[0] = se3_error[1] = se3_error[5] = 0.;

@@ -26,7 +26,7 @@ GainParam check(const rclcpp::Parameter &param)
 struct Gain : Vector6d
 {
   std::string name;
-  Gain(std::string name): name(name) {}
+  explicit Gain(const std::string &name): name(name) {}
 
   inline void setLin(double val)
   {
@@ -63,7 +63,7 @@ struct Gain : Vector6d
   }
 };
 
-class BodySlidingMode : public ControllerIO
+class SlidingMode : public ControllerIO
 {
   // control gains
   Gain lambda{"lambda"};
@@ -77,7 +77,7 @@ class BodySlidingMode : public ControllerIO
   rclcpp::Node::OnSetParametersCallbackHandle::SharedPtr gains_callback;
 
 public:
-  BodySlidingMode() : ControllerIO("body_control_sm")
+  SlidingMode() : ControllerIO("body_control_sm")
   {
     const auto ns = string{get_namespace()};
 
@@ -156,7 +156,7 @@ private:
 int main(int argc, char** argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<auv_control::BodySlidingMode>());
+  rclcpp::spin(std::make_shared<auv_control::SlidingMode>());
   rclcpp::shutdown();
   return 0;
 }
