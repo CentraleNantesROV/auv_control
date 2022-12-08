@@ -41,7 +41,7 @@ public:
     dt = ms.count()/1000.;
   }
 
-  std::string tuneFromParam(const rclcpp::Parameter &param);
+  void tuneFromParam(const rclcpp::Parameter &param);
 
   // allow easy access
   bool use_position{true};

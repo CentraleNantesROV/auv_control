@@ -1,6 +1,5 @@
 from simple_launch import SimpleLauncher
-from plankton_utils.time import is_sim_time
-from launch.substitutions import Command
+
 
 def generate_launch_description():
     
@@ -12,5 +11,4 @@ def generate_launch_description():
         sl.node('slider_publisher', 'slider_publisher', name='wrench_control',
                 arguments=[sl.find('auv_control', 'wrench.yaml')])
         
-
     return sl.launch_description()

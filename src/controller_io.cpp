@@ -43,9 +43,7 @@ Vector6d ControllerIO::Pose::toSE3() const
 }
 
 ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
-  : Node(name,
-         options//.automatically_declare_parameters_from_overrides(true)
-         .allow_undeclared_parameters(true)),
+  : Node(name, options),
     tf_buffer(get_clock()), tf_listener(tf_buffer)
 {
   // control_frame defaults to ns/base_link
@@ -54,11 +52,12 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
   if(const auto slash{control_frame.find_last_of('/')}; slash == control_frame.npos)
     control_frame = "base_link";
   else
-    control_frame.substr(slash+1) + "/base_link";
+    control_frame = control_frame.substr(slash+1) + "/base_link";
   control_frame = declare_parameter<std::string>("control_frame", control_frame);
 
   // control output
-  cmd.name = allocator.parseRobotDescription(this, control_frame);
+  const auto links{allocator.parseRobotDescription(this, control_frame)};
+  std::transform(links.begin(), links.end(), std::back_inserter(cmd.name), [](const auto &link){return link.joint;});
   dofs = cmd.name.size();
   cmd.effort.resize(dofs, 0);
   if(declare_parameter("publish_joint_state", true))
@@ -76,36 +75,47 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
   // control input
   pose_sub = create_subscription<PoseStamped>("cmd_pose", 10, [&](PoseStamped::SharedPtr msg)
   {          pose_setpoint.from(msg->pose.position, msg->pose.orientation);
-             pose_setpoint.frame = msg->header.frame_id;
-             pose_setpoint.time = get_clock()->now().seconds();});
+      pose_setpoint.frame = msg->header.frame_id;
+      pose_setpoint.time = get_clock()->now().seconds();});
 
   vel_sub = create_subscription<TwistStamped>("cmd_vel", 10, [&](TwistStamped::SharedPtr msg)
   {
-            twist2Eigen(msg->twist, vel_setpoint);
-            vel_setpoint.frame = msg->header.frame_id;
-            vel_setpoint.time = get_clock()->now().seconds();});
+      twist2Eigen(msg->twist, vel_setpoint);
+      vel_setpoint.frame = msg->header.frame_id;
+      vel_setpoint.time = get_clock()->now().seconds();});
 
   wrench_sub = create_subscription<Wrench>("cmd_wrench", 1, [&](Wrench::SharedPtr msg)
   {
-               wrench2Eigen(*msg, wrench_setpoint);
-               wrench_setpoint.time = get_clock()->now().seconds();});
+      wrench2Eigen(*msg, wrench_setpoint);
+      wrench_setpoint.time = get_clock()->now().seconds();});
 
   odom_sub = create_subscription<Odometry>("odom", 10, [&](Odometry::SharedPtr msg)
   {twist2Eigen(msg->twist.twist, vel);
-             Pose::tf2Rotation(msg->pose.pose.orientation, orientation);});
+      Pose::tf2Rotation(msg->pose.pose.orientation, orientation);});
 
-   control_srv = create_service<ControlMode>
-                ("control_mode",
-                 [&](const ControlMode::Request::SharedPtr request,
-                 [[maybe_unused]] ControlMode::Response::SharedPtr response)
+  control_srv = create_service<ControlMode>
+      ("control_mode",
+       [&](const ControlMode::Request::SharedPtr request,
+       [[maybe_unused]] ControlMode::Response::SharedPtr response)
   {control_mode = request->mode;});
 
   const auto cmd_period_ms{declare_parameter("control_period_ms", 100)};
   cmd_period = std::chrono::milliseconds(cmd_period_ms);
   cmd_timer = create_wall_timer(cmd_period, [&]() {publish(computeThrusts());});
-
-
 }
+
+double ControllerIO::declareParameterBounded(const std::string &name, double default_value,
+                                             double min, double max)
+{
+  rcl_interfaces::msg::ParameterDescriptor descriptor;
+  descriptor.name = name;
+  descriptor.floating_point_range = {rcl_interfaces::msg::FloatingPointRange()
+                                     .set__from_value(min)
+                                     .set__to_value(max)
+                                    };
+  return declare_parameter(name, default_value, descriptor);
+}
+
 
 Eigen::VectorXd ControllerIO::computeThrusts()
 {
@@ -138,6 +148,7 @@ Eigen::VectorXd ControllerIO::computeThrusts()
   else // to vehicle frame
     se3_error = (relPose(pose_setpoint.frame) * pose_setpoint).toSE3();
 
+
   Vector6d vel_setpoint_local;
   if(vel_timeout)
     vel_setpoint_local.setZero();
@@ -153,9 +164,14 @@ Eigen::VectorXd ControllerIO::computeThrusts()
     se3_error[0] = se3_error[1] = se3_error[5] = 0.;
   }
 
+  std::cout << "se3 error: " << se3_error.transpose() << std::endl;
+  std::cout << "vel      : " << vel.transpose() << std::endl;
+  std::cout << "vel_sp   : " << vel_setpoint_local.transpose() << std::endl;
+
   auto wrench{computeWrench(se3_error, vel, vel_setpoint_local)};
   if(hydro)
     hydro->compensate(wrench, orientation, vel);
+  std::cout << "-> wrench: " << wrench.transpose() << std::endl;
   return allocator.solveWrench(wrench);
 }
 

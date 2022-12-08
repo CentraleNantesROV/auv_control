@@ -15,25 +15,20 @@ double* PID::gainFromName(const std::string &gain)
   return nullptr;
 }
 
-std::string PID::tuneFromParam(const rclcpp::Parameter &param)
+void PID::tuneFromParam(const rclcpp::Parameter &param)
 {
   const auto name{param.get_name().substr(axis.size()+1)};
 
   if(name == "use_position")
   {
     use_position = param.as_bool();
-    return {};
+    return;
   }
 
   const auto gain{gainFromName(name)};
-  if(!gain) return {};
+  if(!gain) return;
 
-  if(param.as_double() >= 0)
-  {
-    *gain = param.as_double();
-    return {};
-  }
-  return name + " is negative ";
+  *gain = param.as_double();
 }
 
 double PID::update(double position_sp, double vel, double vel_sp)

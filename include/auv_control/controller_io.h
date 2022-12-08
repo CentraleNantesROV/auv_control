@@ -36,6 +36,9 @@ public:
 
 protected:
 
+  double declareParameterBounded(const std::string &name, double default_value,
+                          double min, double max_value);
+
   struct Pose
   {
     Eigen::Vector3d t;
