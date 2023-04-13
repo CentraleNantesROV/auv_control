@@ -122,7 +122,7 @@ protected:
   // odom estim
   rclcpp::Subscription<Odometry>::SharedPtr state_sub;
   bool state_ok{false};
-  Vector6d vel;
+  Vector6d vel{Vector6d::Zero()};
   Eigen::Quaterniond orientation;
 
   // command computation
