@@ -72,7 +72,6 @@ class SlidingMode : public ControllerIO
   Gain Kbar{"kbar"};
   Gain mu{"mu"};
   Vector6d K;
-  double dt;
 
   rclcpp::Node::OnSetParametersCallbackHandle::SharedPtr gains_callback;
 
@@ -87,7 +86,6 @@ public:
     Kbar.declareParam(this,1,1);
     mu.declareParam(this,.1,.1);
     K.setConstant(declare_parameter("K", 0.5));
-    dt = cmd_period.count()/1000.;
 
     gains_callback = add_on_set_parameters_callback([&](const auto &parameters)
     {return tuneFromParams(parameters);});

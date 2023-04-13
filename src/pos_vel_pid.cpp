@@ -2,8 +2,6 @@
 
 using namespace auv_control;
 
-double PID::dt{0.1};
-
 double* PID::gainFromName(const std::string &gain)
 {
   if(gain == "Kp") return &Kp;
@@ -31,18 +29,18 @@ void PID::tuneFromParam(const rclcpp::Parameter &param)
   *gain = param.as_double();
 }
 
-double PID::update(double position_sp, double vel, double vel_sp)
+double PID::update(double pos_error, double vel, double vel_sp)
 {
   // actual PID is here
   double e{Kv*(vel_sp - vel)};
   if(use_position)
-    e += std::clamp(Kp*position_sp, -v_sat, v_sat);
+    e += std::clamp(pos_error, -v_sat, v_sat);
 
-  if(std::abs(cmd_integral) < u_sat)
-    cmd_integral += Ki*dt*e;
+  const auto iTerm{Ki*dt*e};
+  if(std::abs(cmd_integral+iTerm) < u_sat)
+    cmd_integral += iTerm;
 
-  const auto cmd{cmd_integral + e - Kd/dt*(vel-vel_prev)};
-
+  const auto cmd{cmd_integral + Kp*e - Kd/dt*(vel-vel_prev)};
   vel_prev = vel;
   return std::clamp(cmd, -u_sat, u_sat);
 }

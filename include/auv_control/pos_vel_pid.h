@@ -36,9 +36,9 @@ public:
     v_sat{gains["v_sat"]}, u_sat{gains["u_sat"]}
   { }
 
-  static void setSamplingTime(std::chrono::milliseconds ms)
+  static void setSamplingTime(double dt)
   {
-    dt = ms.count()/1000.;
+    PID::dt = dt;
   }
 
   void tuneFromParam(const rclcpp::Parameter &param);
@@ -48,7 +48,7 @@ public:
   std::string axis;
   short component;
 
-  double update(double position_sp, double vel, double vel_sp);
+  double update(double pos_error, double vel, double vel_sp);
 
   inline bool hasGain(const std::string &name) const
   {
@@ -61,7 +61,7 @@ private:
   double Kp{}, Kv{}, Ki{}, Kd{}, v_sat{}, u_sat{};
 
   double cmd_integral{0}, vel_prev{0};
-  static double dt;
+  inline static double dt{0.1};
 
   double* gainFromName(const std::string &gain);
 };

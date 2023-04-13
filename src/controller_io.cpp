@@ -28,17 +28,8 @@ Vector6d ControllerIO::Pose::toSE3() const
 {
   Vector6d se3_error;
   se3_error.head<3>() = t;
-
-  const auto sin_theta_over_2{q.vec().norm()};
-  if(sin_theta_over_2 < 1e-6)
-    se3_error.tail<3>().setZero();
-  else
-  {
-    auto angle{2*atan2(sin_theta_over_2, q.w())};
-    if(angle > M_PI)  angle -= 2*M_PI;
-    else if(angle < -M_PI)  angle += 2*M_PI;
-    se3_error.tail<3>() = q.vec() * angle/sin_theta_over_2;
-  }
+  const Eigen::AngleAxisd tu(q);
+  se3_error.tail<3>() = tu.angle() * tu.axis();
   return se3_error;
 }
 
@@ -61,7 +52,11 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
   dofs = cmd.name.size();
   cmd.effort.resize(dofs, 0);
   if(declare_parameter("publish_joint_state", true))
-    cmd_js_pub = create_publisher<JointState>("cmd_thrust", 5);
+    cmd_js_pub = create_publisher<JointState>("cmd_thrust", 5); 
+
+  // any sat
+  if(declare_parameter("saturate_thrust", false))
+    limits = thruster_manager::Limits::SATURATE;
 
   if(get_parameter("use_sim_time").as_bool())
   {
@@ -78,20 +73,21 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
       pose_setpoint.frame = msg->header.frame_id;
       pose_setpoint.time = get_clock()->now().seconds();});
 
-  vel_sub = create_subscription<TwistStamped>("cmd_vel", 10, [&](TwistStamped::SharedPtr msg)
-  {
+  vel_sub = create_subscription<TwistStamped>("cmd_vel", 10, [&](TwistStamped::SharedPtr msg){
       twist2Eigen(msg->twist, vel_setpoint);
       vel_setpoint.frame = msg->header.frame_id;
-      vel_setpoint.time = get_clock()->now().seconds();});
+      vel_setpoint.time = get_clock()->now().seconds();}
+      );
 
-  wrench_sub = create_subscription<Wrench>("cmd_wrench", 1, [&](Wrench::SharedPtr msg)
-  {
+  wrench_sub = create_subscription<Wrench>("cmd_wrench", 1, [&](Wrench::SharedPtr msg){
       wrench2Eigen(*msg, wrench_setpoint);
-      wrench_setpoint.time = get_clock()->now().seconds();});
+      wrench_setpoint.time = get_clock()->now().seconds();}
+      );
 
-  odom_sub = create_subscription<Odometry>("odom", 10, [&](Odometry::SharedPtr msg)
-  {twist2Eigen(msg->twist.twist, vel);
-      Pose::tf2Rotation(msg->pose.pose.orientation, orientation);});
+  state_sub = create_subscription<Odometry>("odom", 10, [&](Odometry::SharedPtr msg){
+      twist2Eigen(msg->twist.twist, vel);
+      Pose::tf2Rotation(msg->pose.pose.orientation, orientation);}
+      );
 
   control_srv = create_service<ControlMode>
       ("control_mode",
@@ -99,23 +95,13 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
        [[maybe_unused]] ControlMode::Response::SharedPtr response)
   {control_mode = request->mode;});
 
-  const auto cmd_period_ms{declare_parameter("control_period_ms", 100)};
-  cmd_period = std::chrono::milliseconds(cmd_period_ms);
+  const auto cmd_period = std::chrono::milliseconds(declareParameterBounded("control_period_ms", 100,
+                                                                            1, 1000, 1));
+  dt = cmd_period.count() / 1000.;
+  // filters if needed
+  filters.init(6, 20, dt);
   cmd_timer = create_wall_timer(cmd_period, [&]() {publish(computeThrusts());});
 }
-
-double ControllerIO::declareParameterBounded(const std::string &name, double default_value,
-                                             double min, double max)
-{
-  rcl_interfaces::msg::ParameterDescriptor descriptor;
-  descriptor.name = name;
-  descriptor.floating_point_range = {rcl_interfaces::msg::FloatingPointRange()
-                                     .set__from_value(min)
-                                     .set__to_value(max)
-                                    };
-  return declare_parameter(name, default_value, descriptor);
-}
-
 
 Eigen::VectorXd ControllerIO::computeThrusts()
 {
@@ -136,7 +122,7 @@ Eigen::VectorXd ControllerIO::computeThrusts()
     // manual wrench control overrides navigation
     if(hydro)
       hydro->compensate(wrench_setpoint, orientation, vel);
-    return allocator.solveWrench(wrench_setpoint);
+    return allocator.solveWrench(wrench_setpoint, limits);
   }
 
   // pose / vel control
@@ -147,7 +133,6 @@ Eigen::VectorXd ControllerIO::computeThrusts()
     se3_error = pose_setpoint.toSE3();
   else // to vehicle frame
     se3_error = (relPose(pose_setpoint.frame) * pose_setpoint).toSE3();
-
 
   Vector6d vel_setpoint_local;
   if(vel_timeout)
@@ -164,15 +149,25 @@ Eigen::VectorXd ControllerIO::computeThrusts()
     se3_error[0] = se3_error[1] = se3_error[5] = 0.;
   }
 
-  std::cout << "se3 error: " << se3_error.transpose() << std::endl;
-  std::cout << "vel      : " << vel.transpose() << std::endl;
-  std::cout << "vel_sp   : " << vel_setpoint_local.transpose() << std::endl;
+  // if no velocity, use a filter on pose error
+  Vector6d diff{Vector6d::Zero()};
+  if(vel.isApproxToConstant(0., 1e-6))
+  {
+    static Vector6d prev_error = Vector6d::Zero();
+    diff = (se3_error - prev_error)/dt;
+    filters.filter(diff);
+    prev_error = se3_error;
+  }
 
-  auto wrench{computeWrench(se3_error, vel, vel_setpoint_local)};
+  //std::cout << "se3 error: " << se3_error.transpose() << std::endl;
+  //std::cout << "vel      : " << vel.transpose() << std::endl;
+  //std::cout << "vel_sp   : " << vel_setpoint_local.transpose() << std::endl;
+
+  auto wrench{computeWrench(se3_error, vel+diff, vel_setpoint_local)};
   if(hydro)
     hydro->compensate(wrench, orientation, vel);
-  std::cout << "-> wrench: " << wrench.transpose() << std::endl;
-  return allocator.solveWrench(wrench);
+  //std::cout << "-> wrench: " << wrench.transpose() << '\n' << std::endl;
+  return allocator.solveWrench(wrench, limits);
 }
 
 void ControllerIO::publish(const Eigen::VectorXd &thrusts)

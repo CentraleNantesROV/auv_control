@@ -6,11 +6,13 @@ using namespace auv_control;
 
 CascadedPID::CascadedPID() : ControllerIO("cascaded_pid")
 {
-  PID::setSamplingTime(cmd_period);
+  PID::setSamplingTime(dt);
 
   // get max thrust per axis, useless to have a running PID on a non-controllable axis
   const std::vector<std::string> axes{"x", "y", "z", "roll", "pitch", "yaw"};
   const auto max_wrench{allocator.maxWrench()};
+
+  std::cout << "max wrench: " << max_wrench.transpose() << std::endl;
   for(int axis = 0; axis < 6; ++axis)
   {
     if(max_wrench(axis) < 1e-3) continue;
@@ -25,7 +27,7 @@ CascadedPID::CascadedPID() : ControllerIO("cascaded_pid")
       if(gain.size() > 3) // u_sat, v_sat
         val = declare_parameter(axes[axis] + "." + gain, val);
       else                // other gains
-        val = declareParameterBounded(axes[axis] + "." + gain, val, 0., 100.);
+        val = declareParameterBounded(axes[axis] + "." + gain, val, 0., 100., 0.1);
     }
 
     pids.emplace_back(axes[axis], axis, gains);

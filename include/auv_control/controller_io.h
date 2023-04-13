@@ -17,6 +17,7 @@
 #include <auv_control/eigen_typedefs.h>
 #include <auv_control/hydrodynamics.h>
 #include <auv_control/srv/control.hpp>
+#include <auv_control/butterworth.h>
 
 namespace auv_control
 {
@@ -36,8 +37,30 @@ public:
 
 protected:
 
-  double declareParameterBounded(const std::string &name, double default_value,
-                          double min, double max_value);
+  inline double declareParameterBounded(const std::string &name, double default_value,
+                          double min, double max, double step = 0.1)
+  {
+      rcl_interfaces::msg::ParameterDescriptor descriptor;
+      descriptor.name = name;
+      descriptor.floating_point_range = {rcl_interfaces::msg::FloatingPointRange()
+                                         .set__from_value(min)
+                                         .set__to_value(max)
+                                         .set__step(step)
+                                        };
+      return declare_parameter(name, default_value, descriptor);
+  }
+  inline int declareParameterBounded(const std::string &name, int default_value,
+                          int min, int max, int step = 1)
+  {
+      rcl_interfaces::msg::ParameterDescriptor descriptor;
+      descriptor.name = name;
+      descriptor.integer_range = {rcl_interfaces::msg::IntegerRange()
+                                         .set__from_value(min)
+                                         .set__to_value(max)
+                                         .set__step(step)
+                                        };
+      return declare_parameter(name, default_value, descriptor);
+  }
 
   struct Pose
   {
@@ -97,22 +120,22 @@ protected:
   StampedSetpoint<Vector6d> wrench_setpoint;
 
   // odom estim
-  rclcpp::Subscription<Odometry>::SharedPtr odom_sub;
+  rclcpp::Subscription<Odometry>::SharedPtr state_sub;
   bool state_ok{false};
   Vector6d vel;
   Eigen::Quaterniond orientation;
 
   // command computation
   uint dofs{};
-  std::chrono::milliseconds cmd_period;
+  double dt;
   rclcpp::Service<ControlMode>::SharedPtr control_srv;
   decltype (ControlMode::Request::mode) control_mode;
   rclcpp::TimerBase::SharedPtr cmd_timer;
   thruster_manager::ThrusterManager allocator;
-  std::unique_ptr<Hydrodynamics> hydro;
+  std::optional<Hydrodynamics> hydro;
 
   // command output
-  // if we publish output as joint states
+  // if we publish output as joint states  
   sensor_msgs::msg::JointState cmd;
   rclcpp::Publisher<JointState>::SharedPtr cmd_js_pub;
 
@@ -120,6 +143,8 @@ protected:
   std::vector<rclcpp::Publisher<Float64>::SharedPtr> cmd_gz_pub;
 
   // command output
+  Butterworth_nD filters;
+  thruster_manager::Limits limits{thruster_manager::Limits::SCALE};
   Eigen::VectorXd computeThrusts();
   void publish(const Eigen::VectorXd &thrusts);
 
