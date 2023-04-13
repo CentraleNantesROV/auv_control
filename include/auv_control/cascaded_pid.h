@@ -27,7 +27,6 @@ public:
   }
 
 protected:
-
   Controllers pids;
   rclcpp::Node::OnSetParametersCallbackHandle::SharedPtr gains_callback;
 
@@ -37,9 +36,6 @@ protected:
 
   rcl_interfaces::msg::SetParametersResult tuneFromParams(const std::vector<rclcpp::Parameter> &parameters);
 };
-
-
-
 }
 
 #endif

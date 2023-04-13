@@ -110,6 +110,7 @@ protected:
   Pose relPose(const std::string &frame);
 
   // setpoints
+  double align_thr{-1.};
   std::string control_frame;
   rclcpp::Subscription<PoseStamped>::SharedPtr pose_sub;
   rclcpp::Subscription<TwistStamped>::SharedPtr vel_sub;

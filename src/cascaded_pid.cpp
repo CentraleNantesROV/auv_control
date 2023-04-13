@@ -12,7 +12,6 @@ CascadedPID::CascadedPID() : ControllerIO("cascaded_pid")
   const std::vector<std::string> axes{"x", "y", "z", "roll", "pitch", "yaw"};
   const auto max_wrench{allocator.maxWrench()};
 
-  std::cout << "max wrench: " << max_wrench.transpose() << std::endl;
   for(int axis = 0; axis < 6; ++axis)
   {
     if(max_wrench(axis) < 1e-3) continue;
@@ -37,7 +36,7 @@ CascadedPID::CascadedPID() : ControllerIO("cascaded_pid")
   }
 
   gains_callback = add_on_set_parameters_callback([&](const auto &parameters)
-    {return tuneFromParams(parameters);});
+  {return tuneFromParams(parameters);});
 }
 
 Vector6d CascadedPID::computeWrench(const Vector6d &se3_error,
@@ -63,7 +62,7 @@ rcl_interfaces::msg::SetParametersResult CascadedPID::tuneFromParams(const std::
     for(auto &pid: pids)
     {
       if(pid.hasGain(param.get_name()))
-         pid.tuneFromParam(param);
+        pid.tuneFromParam(param);
     }
   }
   return rcl_interfaces::msg::SetParametersResult().set__successful(true);

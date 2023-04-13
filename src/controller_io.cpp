@@ -46,6 +46,9 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
     control_frame = control_frame.substr(slash+1) + "/base_link";
   control_frame = declare_parameter<std::string>("control_frame", control_frame);
 
+  // is we want to align to the goal instead of sliding towards it
+  align_thr = declare_parameter("align_thr", -1.);
+
   // control output
   const auto links{allocator.parseRobotDescription(this, control_frame)};
   std::transform(links.begin(), links.end(), std::back_inserter(cmd.name), [](const auto &link){return link.joint;});
@@ -162,6 +165,12 @@ Eigen::VectorXd ControllerIO::computeThrusts()
   //std::cout << "se3 error: " << se3_error.transpose() << std::endl;
   //std::cout << "vel      : " << vel.transpose() << std::endl;
   //std::cout << "vel_sp   : " << vel_setpoint_local.transpose() << std::endl;
+
+  if(align_thr > 0. && se3_error.head<2>().norm() > align_thr)
+  {
+    // forget abound orientation, aim for goal
+    se3_error[5] = .5*atan2(se3_error[1], se3_error[0]);
+  }
 
   auto wrench{computeWrench(se3_error, vel+diff, vel_setpoint_local)};
   if(hydro)
