@@ -1,27 +1,27 @@
 cmd_vel:
     type: geometry_msgs/TwistStamped
     header.frame_id: 'world'
-    x:
-        min: -100
-        max: 100
-        to: pose.position.x
-    y:
-        min: -100
-        max: 100
-        to: pose.position.y
-    z:
-        min: -20
-        max: 1
-        to: pose.position.z
-    roll:
+    vx:
+        min: -10
+        max: 10
+        to: twist.linear.x
+    vy:
+        min: -10
+        max: 10
+        to: twist.linear.y
+    vz:
+        min: -10
+        max: 10
+        to: twist.linear.z
+    wx:
         min: -pi
         max: pi
-        to: pose.orientation.roll
-    pitch:
+        to: twist.angular.x
+    wy:
         min: -pi
         max: pi
-        to: pose.orientation.pitch
-    yaw:
+        to: twist.angular.y
+    wz:
         min: -pi
         max: pi
-        to: pose.orientation.yaw
+        to: twist.angular.z
