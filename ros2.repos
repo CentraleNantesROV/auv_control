@@ -1,0 +1,5 @@
+repositories:
+  thruster_manager:
+    type: git
+    url: https://github.com/CentraleNantesROV/thruster_manager.git
+    version: main
