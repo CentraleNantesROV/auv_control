@@ -1,6 +1,6 @@
-Basic control nodes for a AUV
+# Basic control nodes for a AUV
 
-This packages contains two nodes to perform position and velocity control of an AUV.
+This package contains two nodes to perform position and velocity control of an AUV.
 
 ## Dependencies
 
