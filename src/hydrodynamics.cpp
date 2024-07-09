@@ -14,9 +14,7 @@ namespace auv_control
 
 Hydrodynamics::Hydrodynamics(const std::string &hydro_link)
 {
-
   const auto model{ModelParser(hydro_link)};
-
   model.parseStatics(Mi, cog);  
   model.parseBuoyancy(buoyancy, cob);
   model.parseHydrodynamics(Ma, lin_drag, quad_drag);

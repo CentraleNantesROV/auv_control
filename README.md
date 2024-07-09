@@ -11,12 +11,14 @@ This packages contains two nodes to perform position and velocity control of an 
 ## Common properties
 
 All controllers subscribe to the following:
+
 - `cmd_pos` (`PoseStamped`): the pose setpoint expressed in the header frame
 - `cmd_vel` (`TwistStamped`): the velocity setpoint expressed in the header frame
 - `state` (`Odometry`): an estimation of the current state (pose + velocity) of the vehicle
 - `/tf`: to get the transforms between all frames
 
 The output may be:
+
 - `cmd_thrust` (`JointState`): only the `effort` field is populated with the corresponding thrust for this thruster
 - `<thruster>_cmd` (`Double`): the desired thrust for this thruster. This output is compatible with Gazebo thruster plugin.
 
@@ -31,6 +33,7 @@ The parameter `use_position`, given per-axis, tell if the position setpoint shou
 All gains and parameters are prefixed with the name of the axis: `x.Kp, x.Kv`, etc.
 
 The overall control is as follows:
+
 - without position control: velocity error `e = Kv.(v*-v)`
 - with position control: velocity error `e = Kv.(v*-v) + sat(p*-p), -v_sat, v_sat)`
 - output command `u = sat(Kp.e + Ki.integral(e) - Kd.derivative(e), -u_sat, u_sat)`

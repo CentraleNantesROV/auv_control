@@ -46,7 +46,7 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
     control_frame = control_frame.substr(slash+1) + "/base_link";
   control_frame = declare_parameter<std::string>("control_frame", control_frame);
 
-  // is we want to align to the goal instead of sliding towards it
+  // if we want to align to the goal instead of sliding towards it (e.g. line of sight control)
   align_thr = declare_parameter("align_thr", -1.);
 
   // control output
@@ -162,14 +162,20 @@ Eigen::VectorXd ControllerIO::computeThrusts()
     prev_error = se3_error;
   }
 
-  //std::cout << "se3 error: " << se3_error.transpose() << std::endl;
-  //std::cout << "vel      : " << vel.transpose() << std::endl;
-  //std::cout << "vel_sp   : " << vel_setpoint_local.transpose() << std::endl;
-
-  if(align_thr > 0. && se3_error.head<2>().norm() > align_thr)
+  if(align_thr > 0.)
   {
+    static auto los_phase{true};
+    const auto err{se3_error.head<2>().norm()};
+    if(err > 2*align_thr)
+      los_phase = true;
+    else if(err < align_thr)
+      los_phase = false;
+
     // forget abound orientation, aim for goal
-    se3_error[5] = .5*atan2(se3_error[1], se3_error[0]);
+    if(los_phase)
+    {
+      se3_error[5] = .5*atan2(se3_error[1], se3_error[0]);
+    }
   }
 
   auto wrench{computeWrench(se3_error, vel+diff, vel_setpoint_local)};

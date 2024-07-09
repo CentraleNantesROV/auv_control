@@ -42,7 +42,7 @@ CascadedPID::CascadedPID() : ControllerIO("cascaded_pid")
 Vector6d CascadedPID::computeWrench(const Vector6d &se3_error,
                                     const Vector6d &vel,
                                     const Vector6d &vel_setpoint)
-{
+{ 
   static Vector6d wrench;
   wrench.setZero();
   // call PIDs

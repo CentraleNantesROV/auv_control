@@ -19,6 +19,7 @@ find_package(rosidl_default_generators REQUIRED)
 
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
 rosidl_generate_interfaces(${PROJECT_NAME} "srv/Control.srv")
@@ -48,11 +49,11 @@ target_link_libraries(cascaded_pid control_common)
 add_executable(sliding_mode src/sliding_mode.cpp)
 target_link_libraries(sliding_mode control_common)
 
-if(NOT WIN32)
-  ament_environment_hooks(
-    "${ament_cmake_package_templates_ENVIRONMENT_HOOK_LIBRARY_PATH}"
-    )
-endif()
+#if(NOT WIN32)
+  #ament_environment_hooks(
+    #"${ament_cmake_package_templates_ENVIRONMENT_HOOK_LIBRARY_PATH}"
+    #)
+#endif()
 
 install(TARGETS control_common cascaded_pid sliding_mode
   ARCHIVE DESTINATION lib
@@ -61,5 +62,14 @@ install(TARGETS control_common cascaded_pid sliding_mode
   
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME})
+
+# allow using the class in another package
+# legacy include dir + nested since Humble
+install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
+
+ament_export_include_directories(include)
+ament_export_libraries(control_common)
+ament_export_dependencies(rclcpp nav_msgs sensor_msgs tf2_ros geometry_msgs thruster_manager)
   
 ament_package()
