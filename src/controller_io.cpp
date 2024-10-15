@@ -46,6 +46,9 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
     control_frame = control_frame.substr(slash+1) + "/base_link";
   control_frame = declare_parameter<std::string>("control_frame", control_frame);
 
+  if(declare_parameter("use_hydro", true))
+    hydro = Hydrodynamics(control_frame, this);
+
   // if we want to align to the goal instead of sliding towards it (e.g. line of sight control)
   align_thr = declare_parameter("align_thr", -1.);
 

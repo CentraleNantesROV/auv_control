@@ -12,12 +12,24 @@ using std::string;
 namespace auv_control
 {
 
-Hydrodynamics::Hydrodynamics(const std::string &hydro_link)
+Hydrodynamics::Hydrodynamics(const std::string &hydro_link, rclcpp::Node* node)
 {
   const auto model{ModelParser(hydro_link)};
   model.parseStatics(Mi, cog);  
   model.parseBuoyancy(buoyancy, cob);
   model.parseHydrodynamics(Ma, lin_drag, quad_drag);
+
+  if(node)
+  {
+    RCLCPP_INFO(node->get_logger(), "Got linear drag %f %f %f %f %f %f",
+                lin_drag(0,0), lin_drag(1,0), lin_drag(2,0),
+                lin_drag(3,0), lin_drag(4,0), lin_drag(5,0));
+    RCLCPP_INFO(node->get_logger(), "Got quadratic drag %f %f %f %f %f %f",
+                quad_drag(0,0), quad_drag(1,0), quad_drag(2,0),
+                quad_drag(3,0), quad_drag(4,0), quad_drag(5,0));
+  }
+
+
 }
 
 void Hydrodynamics::compensate(Vector6d &wrench, const Eigen::Quaterniond &q, const Vector6d &vel) const
