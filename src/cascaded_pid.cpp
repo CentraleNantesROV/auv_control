@@ -26,7 +26,7 @@ CascadedPID::CascadedPID() : ControllerIO("cascaded_pid")
       if(gain.size() > 3) // u_sat, v_sat
         val = declare_parameter(axes[axis] + "." + gain, val);
       else                // other gains
-        val = declareParameterBounded(axes[axis] + "." + gain, val, 0., 100., 0.1);
+        val = declareParameterBounded(axes[axis] + "." + gain, val, 0., 300., 0.1);
     }
 
     pids.emplace_back(axes[axis], axis, gains);
