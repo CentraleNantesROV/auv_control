@@ -145,7 +145,6 @@ protected:
 
   // command output
   Butterworth_nD filters;
-  thruster_manager::Limits limits{thruster_manager::Limits::SCALE};
   Eigen::VectorXd computeThrusts();
   void publish(const Eigen::VectorXd &thrusts);
 

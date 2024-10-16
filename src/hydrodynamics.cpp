@@ -28,8 +28,6 @@ Hydrodynamics::Hydrodynamics(const std::string &hydro_link, rclcpp::Node* node)
                 quad_drag(0,0), quad_drag(1,0), quad_drag(2,0),
                 quad_drag(3,0), quad_drag(4,0), quad_drag(5,0));
   }
-
-
 }
 
 void Hydrodynamics::compensate(Vector6d &wrench, const Eigen::Quaterniond &q, const Vector6d &vel) const

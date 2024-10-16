@@ -60,10 +60,6 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
   if(declare_parameter("publish_joint_state", true))
     cmd_js_pub = create_publisher<JointState>("cmd_thrust", 5); 
 
-  // any sat
-  if(declare_parameter("saturate_thrust", false))
-    limits = thruster_manager::Limits::SATURATE;
-
   if(get_parameter("use_sim_time").as_bool())
   {
     for(const auto &name: cmd.name)
@@ -128,7 +124,7 @@ Eigen::VectorXd ControllerIO::computeThrusts()
     // manual wrench control overrides navigation
     if(hydro)
       hydro->compensate(wrench_setpoint, orientation, vel);
-    return allocator.solveWrench(wrench_setpoint, limits);
+    return allocator.solveWrench(wrench_setpoint);
   }
 
   // pose / vel control
@@ -185,7 +181,7 @@ Eigen::VectorXd ControllerIO::computeThrusts()
   if(hydro)
     hydro->compensate(wrench, orientation, vel);
   //std::cout << "-> wrench: " << wrench.transpose() << '\n' << std::endl;
-  return allocator.solveWrench(wrench, limits);
+  return allocator.solveWrench(wrench);
 }
 
 void ControllerIO::publish(const Eigen::VectorXd &thrusts)
