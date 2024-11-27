@@ -103,18 +103,21 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
   cmd_timer = create_wall_timer(cmd_period, [&]() {publish(computeThrusts());});
 }
 
-Vector6d ControllerIO::twist() const
+Vector6d ControllerIO::twist(const Eigen::Quaterniond& q) const
 {
-
   if(odom_twist.has_value())
     return odom_twist.value();
 
   // if no velocity from odometry, use tf to get velocity
+  // not sure about the syntax
   Vector6d twist{Vector6d::Zero()};
   try
   {
-    const auto stamped{tf_buffer.lookupVelocity(control_frame, control_frame, tf2::TimePointZero, 100ms)};
+    const auto stamped{tf_buffer.lookupVelocity(control_frame, "world",
+                                                tf2::timeFromSec(get_clock()->now().seconds()), 100ms)};
     twist2Eigen(stamped.velocity, twist);
+    twist.head<3>() = q*twist.head<3>();
+    twist.tail<3>() = q*twist.tail<3>();
   }
   catch(const tf2::TransformException &ex)
   {
@@ -123,18 +126,13 @@ Vector6d ControllerIO::twist() const
   return twist;
 }
 
-Eigen::VectorXd ControllerIO::wrench2Thrusts(Vector6d wrench, const Vector6d &twist)
+Eigen::VectorXd ControllerIO::wrench2Thrusts(Vector6d wrench, const Eigen::Quaterniond& q, const Vector6d &twist)
 {
   if(hydro)
   {
     // get orientation in world frame
     if(tf_buffer.canTransform("world", control_frame, tf2::TimePointZero, 10ms))
-    {
-      const auto tf{tf_buffer.lookupTransform("world", control_frame, tf2::TimePointZero, 10ms).transform};
-      Eigen::Quaterniond q;
-      Pose::tf2Rotation(tf.rotation, q);
       hydro->compensate(wrench, q, twist);
-    }
   }
   return allocator.solveWrench(wrench);
 }
@@ -156,7 +154,12 @@ Eigen::VectorXd ControllerIO::computeThrusts()
   if(!wrench_timeout)
   {
     // manual wrench control overrides navigation
-    return wrench2Thrusts(wrench_setpoint, twist());
+    if(hydro)
+    {
+      const auto q{relPose(control_frame, "world").q};
+      hydro->compensate(wrench_setpoint, q, twist(q));
+    }
+    return allocator.solveWrench(wrench_setpoint);
   }
 
   // pose / vel control
@@ -199,8 +202,12 @@ Eigen::VectorXd ControllerIO::computeThrusts()
     }
   }
 
-  const auto twist{this->twist()};
-  return wrench2Thrusts(computeWrench(se3_error, twist, twist_setpoint), twist);
+  const auto q{relPose(control_frame, "world").q};
+  const auto twist{this->twist(q)};
+  auto wrench{computeWrench(se3_error, twist, twist_setpoint)};
+  if(hydro)
+    hydro->compensate(wrench, q, twist);
+  return allocator.solveWrench(wrench);
 }
 
 void ControllerIO::publish(const Eigen::VectorXd &thrusts)
@@ -223,9 +230,10 @@ void ControllerIO::publish(const Eigen::VectorXd &thrusts)
   }
 }
 
-ControllerIO::Pose ControllerIO::relPose(const std::string &frame) const
+ControllerIO::Pose ControllerIO::relPose(const std::string &frame, const std::string &target_frame) const
 {
   Pose rel_pose;
+  const auto control_frame{target_frame.empty() ? this->control_frame : target_frame};
   if(tf_buffer.canTransform(control_frame, frame, tf2::TimePointZero, 10ms))
   {
     const auto tf{tf_buffer.lookupTransform(control_frame, frame, tf2::TimePointZero, 10ms).transform};
