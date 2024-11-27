@@ -17,7 +17,6 @@
 #include <auv_control/eigen_typedefs.h>
 #include <auv_control/hydrodynamics.h>
 #include <auv_control/srv/control.hpp>
-#include <auv_control/butterworth.h>
 
 namespace auv_control
 {
@@ -107,7 +106,7 @@ protected:
 
   tf2_ros::Buffer tf_buffer;
   tf2_ros::TransformListener tf_listener;
-  Pose relPose(const std::string &frame);
+  Pose relPose(const std::string &frame) const;
 
   // setpoints
   double align_thr{-1.};
@@ -120,11 +119,13 @@ protected:
   StampedSetpoint<Vector6d> vel_setpoint;
   StampedSetpoint<Vector6d> wrench_setpoint;
 
+  // velocit
+  Vector6d twist() const;
+
   // odom estim
   rclcpp::Subscription<Odometry>::SharedPtr state_sub;
   bool state_ok{false};
-  Vector6d vel{Vector6d::Zero()};
-  Eigen::Quaterniond orientation;
+  std::optional<Vector6d> odom_twist;
 
   // command computation
   uint dofs{};
@@ -144,9 +145,9 @@ protected:
   std::vector<rclcpp::Publisher<Float64>::SharedPtr> cmd_gz_pub;
 
   // command output
-  Butterworth_nD filters;
   Eigen::VectorXd computeThrusts();
   void publish(const Eigen::VectorXd &thrusts);
+  Eigen::VectorXd wrench2Thrusts(Vector6d wrench, const Vector6d& twist);
 
   // actual-controller-dependent
   virtual Vector6d computeWrench(const Vector6d &se3_error,

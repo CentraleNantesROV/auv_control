@@ -34,7 +34,7 @@ Vector6d ControllerIO::Pose::toSE3() const
 }
 
 ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
-  : Node(name, options),
+    : Node(name, options),
     tf_buffer(get_clock()), tf_listener(tf_buffer)
 {
   // control_frame defaults to ns/base_link
@@ -71,38 +71,72 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
 
   // control input
   pose_sub = create_subscription<PoseStamped>("cmd_pose", 10, [&](PoseStamped::SharedPtr msg)
-  {          pose_setpoint.from(msg->pose.position, msg->pose.orientation);
+                                              {          pose_setpoint.from(msg->pose.position, msg->pose.orientation);
       pose_setpoint.frame = msg->header.frame_id;
       pose_setpoint.time = get_clock()->now().seconds();});
 
   vel_sub = create_subscription<TwistStamped>("cmd_vel", 10, [&](TwistStamped::SharedPtr msg){
-      twist2Eigen(msg->twist, vel_setpoint);
-      vel_setpoint.frame = msg->header.frame_id;
-      vel_setpoint.time = get_clock()->now().seconds();}
-      );
+    twist2Eigen(msg->twist, vel_setpoint);
+    vel_setpoint.frame = msg->header.frame_id;
+    vel_setpoint.time = get_clock()->now().seconds();}
+                                              );
 
   wrench_sub = create_subscription<Wrench>("cmd_wrench", 1, [&](Wrench::SharedPtr msg){
-      wrench2Eigen(*msg, wrench_setpoint);
-      wrench_setpoint.time = get_clock()->now().seconds();}
-      );
+    wrench2Eigen(*msg, wrench_setpoint);
+    wrench_setpoint.time = get_clock()->now().seconds();}
+                                           );
 
   state_sub = create_subscription<Odometry>("odom", 10, [&](Odometry::SharedPtr msg){
-      twist2Eigen(msg->twist.twist, vel);
-      Pose::tf2Rotation(msg->pose.pose.orientation, orientation);}
-      );
+    if(!odom_twist.has_value())
+      odom_twist.emplace();
+    twist2Eigen(msg->twist.twist, *odom_twist);});
 
   control_srv = create_service<ControlMode>
       ("control_mode",
        [&](const ControlMode::Request::SharedPtr request,
-       [[maybe_unused]] ControlMode::Response::SharedPtr response)
-  {control_mode = request->mode;});
+           [[maybe_unused]] ControlMode::Response::SharedPtr response)
+       {control_mode = request->mode;});
 
   const auto cmd_period = std::chrono::milliseconds(declareParameterBounded("control_period_ms", 100,
                                                                             1, 1000, 1));
   dt = cmd_period.count() / 1000.;
-  // filters if needed
-  filters.init(6, 20, dt);
   cmd_timer = create_wall_timer(cmd_period, [&]() {publish(computeThrusts());});
+}
+
+Vector6d ControllerIO::twist() const
+{
+
+  if(odom_twist.has_value())
+    return odom_twist.value();
+
+  // if no velocity from odometry, use tf to get velocity
+  Vector6d twist{Vector6d::Zero()};
+  try
+  {
+    const auto stamped{tf_buffer.lookupVelocity(control_frame, control_frame, tf2::TimePointZero, 100ms)};
+    twist2Eigen(stamped.velocity, twist);
+  }
+  catch(const tf2::TransformException &ex)
+  {
+    RCLCPP_ERROR(get_logger(), "Cannot get velocity: %s", ex.what());
+  }
+  return twist;
+}
+
+Eigen::VectorXd ControllerIO::wrench2Thrusts(Vector6d wrench, const Vector6d &twist)
+{
+  if(hydro)
+  {
+    // get orientation in world frame
+    if(tf_buffer.canTransform("world", control_frame, tf2::TimePointZero, 10ms))
+    {
+      const auto tf{tf_buffer.lookupTransform("world", control_frame, tf2::TimePointZero, 10ms).transform};
+      Eigen::Quaterniond q;
+      Pose::tf2Rotation(tf.rotation, q);
+      hydro->compensate(wrench, q, twist);
+    }
+  }
+  return allocator.solveWrench(wrench);
 }
 
 Eigen::VectorXd ControllerIO::computeThrusts()
@@ -122,9 +156,7 @@ Eigen::VectorXd ControllerIO::computeThrusts()
   if(!wrench_timeout)
   {
     // manual wrench control overrides navigation
-    if(hydro)
-      hydro->compensate(wrench_setpoint, orientation, vel);
-    return allocator.solveWrench(wrench_setpoint);
+    return wrench2Thrusts(wrench_setpoint, twist());
   }
 
   // pose / vel control
@@ -136,29 +168,19 @@ Eigen::VectorXd ControllerIO::computeThrusts()
   else // to vehicle frame
     se3_error = (relPose(pose_setpoint.frame) * pose_setpoint).toSE3();
 
-  Vector6d vel_setpoint_local;
+  Vector6d twist_setpoint;
   if(vel_timeout)
-    vel_setpoint_local.setZero();
+    twist_setpoint.setZero();
   else if(vel_setpoint.frame == control_frame || vel_setpoint.isApproxToConstant(0, 1e-3))
-    vel_setpoint_local = vel_setpoint;
+    twist_setpoint = vel_setpoint;
   else // to vehicle frame
-    relPose(vel_setpoint.frame).rotate2(vel_setpoint, vel_setpoint_local);
+    relPose(vel_setpoint.frame).rotate2(vel_setpoint, twist_setpoint);
 
   // hybrid control mode
   if(control_mode == ControlMode::Request::DEPTH)
   {
     // position mode only for Z, roll, pitch
     se3_error[0] = se3_error[1] = se3_error[5] = 0.;
-  }
-
-  // if no velocity, use a filter on pose error
-  Vector6d diff{Vector6d::Zero()};
-  if(vel.isApproxToConstant(0., 1e-6))
-  {
-    static Vector6d prev_error = Vector6d::Zero();
-    diff = (se3_error - prev_error)/dt;
-    filters.filter(diff);
-    prev_error = se3_error;
   }
 
   if(align_thr > 0.)
@@ -177,11 +199,8 @@ Eigen::VectorXd ControllerIO::computeThrusts()
     }
   }
 
-  auto wrench{computeWrench(se3_error, vel+diff, vel_setpoint_local)};
-  if(hydro)
-    hydro->compensate(wrench, orientation, vel);
-  //std::cout << "-> wrench: " << wrench.transpose() << '\n' << std::endl;
-  return allocator.solveWrench(wrench);
+  const auto twist{this->twist()};
+  return wrench2Thrusts(computeWrench(se3_error, twist, twist_setpoint), twist);
 }
 
 void ControllerIO::publish(const Eigen::VectorXd &thrusts)
@@ -204,7 +223,7 @@ void ControllerIO::publish(const Eigen::VectorXd &thrusts)
   }
 }
 
-ControllerIO::Pose ControllerIO::relPose(const std::string &frame)
+ControllerIO::Pose ControllerIO::relPose(const std::string &frame) const
 {
   Pose rel_pose;
   if(tf_buffer.canTransform(control_frame, frame, tf2::TimePointZero, 10ms))
