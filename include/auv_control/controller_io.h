@@ -106,7 +106,7 @@ protected:
 
   tf2_ros::Buffer tf_buffer;
   tf2_ros::TransformListener tf_listener;
-  Pose relPose(const std::string &frame, const std::string &rel_frame = "") const;
+  Pose relPose(const std::string &frame) const;
 
   // setpoints
   double align_thr{-1.};
@@ -147,7 +147,6 @@ protected:
   // command output
   Eigen::VectorXd computeThrusts();
   void publish(const Eigen::VectorXd &thrusts);
-  Eigen::VectorXd wrench2Thrusts(Vector6d wrench, const Eigen::Quaterniond &q, const Vector6d& twist);
 
   // actual-controller-dependent
   virtual Vector6d computeWrench(const Vector6d &se3_error,

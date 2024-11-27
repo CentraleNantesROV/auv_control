@@ -113,7 +113,7 @@ Vector6d ControllerIO::twist(const Eigen::Quaterniond& q) const
   Vector6d twist{Vector6d::Zero()};
   try
   {
-    const auto stamped{tf_buffer.lookupVelocity(control_frame, "world",
+    const auto stamped{tf_buffer.lookupVelocity("world",control_frame,
                                                 tf2::timeFromSec(get_clock()->now().seconds()), 100ms)};
     twist2Eigen(stamped.velocity, twist);
     twist.head<3>() = q*twist.head<3>();
@@ -124,17 +124,6 @@ Vector6d ControllerIO::twist(const Eigen::Quaterniond& q) const
     RCLCPP_ERROR(get_logger(), "Cannot get velocity: %s", ex.what());
   }
   return twist;
-}
-
-Eigen::VectorXd ControllerIO::wrench2Thrusts(Vector6d wrench, const Eigen::Quaterniond& q, const Vector6d &twist)
-{
-  if(hydro)
-  {
-    // get orientation in world frame
-    if(tf_buffer.canTransform("world", control_frame, tf2::TimePointZero, 10ms))
-      hydro->compensate(wrench, q, twist);
-  }
-  return allocator.solveWrench(wrench);
 }
 
 Eigen::VectorXd ControllerIO::computeThrusts()
@@ -156,7 +145,7 @@ Eigen::VectorXd ControllerIO::computeThrusts()
     // manual wrench control overrides navigation
     if(hydro)
     {
-      const auto q{relPose(control_frame, "world").q};
+      const auto q{relPose("world").q};
       hydro->compensate(wrench_setpoint, q, twist(q));
     }
     return allocator.solveWrench(wrench_setpoint);
@@ -202,7 +191,7 @@ Eigen::VectorXd ControllerIO::computeThrusts()
     }
   }
 
-  const auto q{relPose(control_frame, "world").q};
+  const auto q{relPose("world").q};
   const auto twist{this->twist(q)};
   auto wrench{computeWrench(se3_error, twist, twist_setpoint)};
   if(hydro)
@@ -230,10 +219,9 @@ void ControllerIO::publish(const Eigen::VectorXd &thrusts)
   }
 }
 
-ControllerIO::Pose ControllerIO::relPose(const std::string &frame, const std::string &target_frame) const
+ControllerIO::Pose ControllerIO::relPose(const std::string &frame) const
 {
   Pose rel_pose;
-  const auto control_frame{target_frame.empty() ? this->control_frame : target_frame};
   if(tf_buffer.canTransform(control_frame, frame, tf2::TimePointZero, 10ms))
   {
     const auto tf{tf_buffer.lookupTransform(control_frame, frame, tf2::TimePointZero, 10ms).transform};
