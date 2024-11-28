@@ -86,7 +86,7 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
     wrench_setpoint.time = get_clock()->now().seconds();}
                                            );
 
-  state_sub = create_subscription<Odometry>("odom", 10, [&](Odometry::SharedPtr msg){
+  odom_sub = create_subscription<Odometry>("odom", 10, [&](Odometry::SharedPtr msg){
     if(!odom_twist.has_value())
       odom_twist.emplace();
     twist2Eigen(msg->twist.twist, *odom_twist);});
@@ -100,21 +100,25 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
   const auto cmd_period = std::chrono::milliseconds(declareParameterBounded("control_period_ms", 100,
                                                                             1, 1000, 1));
   dt = cmd_period.count() / 1000.;
+  vel_filter.init(6, .5/dt, dt);
   cmd_timer = create_wall_timer(cmd_period, [&]() {publish(computeThrusts());});
 }
 
-Vector6d ControllerIO::twist(const Eigen::Quaterniond& q) const
+Vector6d ControllerIO::twist(const Eigen::Quaterniond& q)
 {
   if(odom_twist.has_value())
+  {
+    vel_filter.filter(odom_twist.value());
     return odom_twist.value();
+  }
 
   // if no velocity from odometry, use tf to get velocity
-  // not sure about the syntax
+  // not the best idea though
   Vector6d twist{Vector6d::Zero()};
   try
   {
     const auto stamped{tf_buffer.lookupVelocity("world",control_frame,
-                                                tf2::timeFromSec(get_clock()->now().seconds()), 100ms)};
+                                                tf2::timeFromSec(get_clock()->now().seconds()-dt), 100ms)};
     twist2Eigen(stamped.velocity, twist);
     twist.head<3>() = q*twist.head<3>();
     twist.tail<3>() = q*twist.tail<3>();
@@ -123,6 +127,8 @@ Vector6d ControllerIO::twist(const Eigen::Quaterniond& q) const
   {
     RCLCPP_ERROR(get_logger(), "Cannot get velocity: %s", ex.what());
   }
+
+  vel_filter.filter(twist);
   return twist;
 }
 

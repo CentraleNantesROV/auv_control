@@ -17,6 +17,7 @@
 #include <auv_control/eigen_typedefs.h>
 #include <auv_control/hydrodynamics.h>
 #include <auv_control/srv/control.hpp>
+#include <auv_control/butterworth.h>
 
 namespace auv_control
 {
@@ -120,10 +121,11 @@ protected:
   StampedSetpoint<Vector6d> wrench_setpoint;
 
   // velocity
-  Vector6d twist(const Eigen::Quaterniond &q) const;
+  Vector6d twist(const Eigen::Quaterniond &q);
+  Butterworth_nD vel_filter;
 
   // odom estim
-  rclcpp::Subscription<Odometry>::SharedPtr state_sub;
+  rclcpp::Subscription<Odometry>::SharedPtr odom_sub;
   bool state_ok{false};
   std::optional<Vector6d> odom_twist;
 
