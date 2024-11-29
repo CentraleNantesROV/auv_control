@@ -19,7 +19,8 @@ class Hydrodynamics
 public:
 
   Hydrodynamics(const std::string &hydro_link, rclcpp::Node* node = nullptr);
-  void compensate(Vector6d &wrench, const Eigen::Quaterniond &bRw, const Vector6d &vel) const;
+  void compensate(Vector6d &wrench, const Eigen::Quaterniond &bRw,
+                  const Vector6d &twist, const Vector3d& current) const;
 
 };
 }

@@ -23,7 +23,8 @@ namespace auv_control
 {
 
 class ControllerIO : public rclcpp::Node
-{  
+{
+  using Vector3 = geometry_msgs::msg::Vector3;
   using PoseStamped = geometry_msgs::msg::PoseStamped;
   using TwistStamped = geometry_msgs::msg::TwistStamped;
   using JointState = sensor_msgs::msg::JointState;
@@ -123,6 +124,8 @@ protected:
   // velocity
   Vector6d twist(const Eigen::Quaterniond &q);
   Butterworth_nD vel_filter;
+  rclcpp::Subscription<Vector3>::SharedPtr current_sub;
+  Vector3d current_estim;
 
   // odom estim
   rclcpp::Subscription<Odometry>::SharedPtr odom_sub;

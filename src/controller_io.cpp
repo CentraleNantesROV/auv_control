@@ -69,6 +69,13 @@ ControllerIO::ControllerIO(std::string name, rclcpp::NodeOptions options)
     }
   }
 
+  // current estim
+  current_estim = Vector3d::Zero();
+  current_sub = create_subscription<Vector3>("current_estim", 10, [&](Vector3::SharedPtr msg)
+                                             {current_estim[0] = msg->x;
+                                               current_estim[1] = msg->y;
+                                               current_estim[2] = msg->z;});
+
   // control input
   pose_sub = create_subscription<PoseStamped>("cmd_pose", 10, [&](PoseStamped::SharedPtr msg)
                                               {          pose_setpoint.from(msg->pose.position, msg->pose.orientation);
@@ -152,7 +159,7 @@ Eigen::VectorXd ControllerIO::computeThrusts()
     if(hydro)
     {
       const auto q{relPose("world").q};
-      hydro->compensate(wrench_setpoint, q, twist(q));
+      hydro->compensate(wrench_setpoint, q, twist(q), current_estim);
     }
     return allocator.solveWrench(wrench_setpoint);
   }
@@ -201,7 +208,7 @@ Eigen::VectorXd ControllerIO::computeThrusts()
   const auto twist{this->twist(q)};
   auto wrench{computeWrench(se3_error, twist, twist_setpoint)};
   if(hydro)
-    hydro->compensate(wrench, q, twist);
+    hydro->compensate(wrench, q, twist, current_estim);
   return allocator.solveWrench(wrench);
 }
 

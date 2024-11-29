@@ -30,7 +30,8 @@ Hydrodynamics::Hydrodynamics(const std::string &hydro_link, rclcpp::Node* node)
   }
 }
 
-void Hydrodynamics::compensate(Vector6d &wrench, const Eigen::Quaterniond &bRw, const Vector6d &vel) const
+void Hydrodynamics::compensate(Vector6d &wrench, const Eigen::Quaterniond &bRw,
+                               const Vector6d &twist, const Vector3d &current) const
 {
   // statics from gravity and buoyancy in local frame
   const auto grav{bRw * Eigen::Vector3d{0,0,-9.81*Mi(0,0)}};
@@ -38,9 +39,14 @@ void Hydrodynamics::compensate(Vector6d &wrench, const Eigen::Quaterniond &bRw, 
   wrench.head<3>() -= grav + buoy;
   wrench.tail<3>() -= cog.cross(grav) + cob.cross(buoy);
 
+  // write current in body frame
+  const auto rel_vel{twist.head<3>() - bRw*current};
   // drag
-  for(uint i = 0; i < 6; ++i)
-    wrench(i) -= lin_drag(i)*vel(i) + quad_drag(i)*std::abs(vel(i))*vel(i);
+  for(uint i = 0; i < 3; ++i)
+  {
+    wrench(i) -= lin_drag(i)*(rel_vel(i)) + quad_drag(i)*std::abs(rel_vel(i))*rel_vel(i);
+    wrench(i+3) -= lin_drag(i+3)*twist(i+3) + quad_drag(i+3)*std::abs(twist(i+3))*twist(i+3);
+  }
 
   // Ma / Mi maybe later
 

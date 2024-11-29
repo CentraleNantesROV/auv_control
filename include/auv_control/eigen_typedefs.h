@@ -6,6 +6,7 @@
 namespace auv_control
 {
 
+using Vector3d = Eigen::Matrix<double, 3, 1>;
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6Xd = Eigen::Matrix<double, 6, Eigen::Dynamic>;
 using MatrixX6d = Eigen::Matrix<double, Eigen::Dynamic, 6>;

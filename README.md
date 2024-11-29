@@ -14,8 +14,9 @@ All controllers subscribe to the following:
 
 - `cmd_pos` (`PoseStamped`): the pose setpoint expressed in the header frame
 - `cmd_vel` (`TwistStamped`): the velocity setpoint expressed in the header frame
-- `state` (`Odometry`): an estimation of the current state (pose + velocity) of the vehicle
-- `/tf`: to get the transforms between all frames
+- `odom` (`Odometry`): an estimation of the current state (twist) of the vehicle
+- `current_estim` (`Vector3`): an estimation of the ocean current in the world frame
+- `/tf`: to get the transforms between all frames, also used to estimate the twist if `odom` is not available
 
 The output may be:
 
