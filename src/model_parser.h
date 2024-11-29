@@ -148,7 +148,7 @@ public:
     {
       Ma(idx,idx) = readTag(hydro, dir+"Dot"+comp);
       lin_drag(idx) = readTag(hydro, dir+comp);
-      quad_drag(idx) = readTag(hydro, dir+comp+comp);
+      quad_drag(idx) = readTag(hydro, dir+comp+"abs"+comp);
       idx++;
     }
   }
