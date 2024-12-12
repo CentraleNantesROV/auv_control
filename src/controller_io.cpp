@@ -119,9 +119,10 @@ Vector6d ControllerIO::twist(const Eigen::Quaterniond& q)
     return odom_twist.value();
   }
 
-  // if no velocity from odometry, use tf to get velocity
-  // not the best idea though
   Vector6d twist{Vector6d::Zero()};
+#ifdef AUV_CONTROL_WITH_LOOKUP_VELOCITY
+  // if no velocity from odometry, use tf to get velocity
+  // not the best idea though  
   try
   {
     const auto stamped{tf_buffer.lookupVelocity("world",control_frame,
@@ -134,8 +135,8 @@ Vector6d ControllerIO::twist(const Eigen::Quaterniond& q)
   {
     RCLCPP_ERROR(get_logger(), "Cannot get velocity: %s", ex.what());
   }
-
   vel_filter.filter(twist);
+#endif
   return twist;
 }
 

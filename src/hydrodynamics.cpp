@@ -21,10 +21,14 @@ Hydrodynamics::Hydrodynamics(const std::string &hydro_link, rclcpp::Node* node)
 
   if(node)
   {
-    RCLCPP_INFO(node->get_logger(), "Got linear drag %f %f %f %f %f %f",
+    RCLCPP_INFO(node->get_logger(), "Got weight %.02f @ (%.02f %.02f %.02f)",
+                Mi(0,0), cog(0), cog(1), cog(2));
+    RCLCPP_INFO(node->get_logger(), "Got buoyancy %.02f @ (%.02f %.02f %.02f)",
+                buoyancy, cob(0), cob(1), cob(2));
+    RCLCPP_INFO(node->get_logger(), "Got linear drag %.02f %.02f %.02f %.02f %.02f %.02f",
                 lin_drag(0,0), lin_drag(1,0), lin_drag(2,0),
                 lin_drag(3,0), lin_drag(4,0), lin_drag(5,0));
-    RCLCPP_INFO(node->get_logger(), "Got quadratic drag %f %f %f %f %f %f",
+    RCLCPP_INFO(node->get_logger(), "Got quadratic drag %.02f %.02f %.02f %.02f %.02f %.02f",
                 quad_drag(0,0), quad_drag(1,0), quad_drag(2,0),
                 quad_drag(3,0), quad_drag(4,0), quad_drag(5,0));
   }
